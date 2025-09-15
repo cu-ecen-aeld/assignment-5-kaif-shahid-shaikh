@@ -11,14 +11,14 @@ KERNEL_VERSION=v5.15.163
 BUSYBOX_VERSION=1_33_1
 FINDER_APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 ARCH=arm64
-CROSS_COMPILE=aarch64-linux-gnu-
+CROSS_COMPILE=aarch64-none-linux-gnu-
 
 if [ $# -lt 1 ]
 then
-                  echo "Using default directory ${OUTDIR} for output"
+	echo "Using default directory ${OUTDIR} for output"
 else
-                  OUTDIR=$1
-                  echo "Using passed directory ${OUTDIR} for output"
+	OUTDIR=$1
+	echo "Using passed directory ${OUTDIR} for output"
 fi
 
 mkdir -p ${OUTDIR}
@@ -26,8 +26,8 @@ mkdir -p ${OUTDIR}
 cd "$OUTDIR"
 if [ ! -d "${OUTDIR}/linux-stable" ]; then
     #Clone only if the repository does not exist.
-                  echo "CLONING GIT LINUX STABLE VERSION ${KERNEL_VERSION} IN ${OUTDIR}"
-                  git clone ${KERNEL_REPO} --depth 1 --single-branch --branch ${KERNEL_VERSION}
+	echo "CLONING GIT LINUX STABLE VERSION ${KERNEL_VERSION} IN ${OUTDIR}"
+	git clone ${KERNEL_REPO} --depth 1 --single-branch --branch ${KERNEL_VERSION}
 fi
 if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     cd linux-stable
@@ -44,7 +44,7 @@ make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
 #Build the kernel image (use -j4 to speed up with 4 parallel jobs)
 make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all
 
-#Build kernel modules
+#Build kernel modules 
 make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules
 
 #Build device tree blobs (dtbs) for QEMU
@@ -59,7 +59,7 @@ echo "Creating the staging directory for the root filesystem"
 cd "$OUTDIR"
 if [ -d "${OUTDIR}/rootfs" ]
 then
-                  echo "Deleting rootfs directory at ${OUTDIR}/rootfs and starting over"
+	echo "Deleting rootfs directory at ${OUTDIR}/rootfs and starting over"
     sudo rm  -rf ${OUTDIR}/rootfs
 fi
 
@@ -95,7 +95,7 @@ ${CROSS_COMPILE}readelf -a ${OUTDIR}/rootfs/bin/busybox | grep "Shared library"
 
 SYSROOT=$(${CROSS_COMPILE}gcc --print-sysroot)
 sudo cp -a ${SYSROOT}/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib/
-sudo cp -a ${SYSROOT}/lib64/libc.so.6 ${OUTDIR}/rootfs/lib64/
+sudo cp -a ${SYSROOT}/lib64/libc.so.6 ${OUTDIR}/rootfs/lib64/ 
 sudo cp -a ${SYSROOT}/lib64/libm.so.6 ${OUTDIR}/rootfs/lib64/
 sudo cp -a ${SYSROOT}/lib64/libresolv.so.2 ${OUTDIR}/rootfs/lib64/
 
@@ -115,9 +115,25 @@ cp ${FINDER_APP_DIR}/finder.sh ${OUTDIR}/rootfs/home/
 cp ${FINDER_APP_DIR}/writer ${OUTDIR}/rootfs/home/
 cp ${FINDER_APP_DIR}/writer.c ${OUTDIR}/rootfs/home/
 cp ${FINDER_APP_DIR}/autorun-qemu.sh ${OUTDIR}/rootfs/home/
-cp -rL ${FINDER_APP_DIR}/conf ${OUTDIR}/rootfs/home/
-mkdir -p "${OUTDIR}/rootfs/etc/finder-app/conf"
-cp -a "${OUTDIR}/rootfs/home/conf/"* "${OUTDIR}/rootfs/etc/finder-app/conf/"
+# Determine where conf lives in the repo
+REPO_ROOT="$(cd "${FINDER_APP_DIR}/.." && pwd)"
+if [ -d "${FINDER_APP_DIR}/conf" ]; then
+  SRC_CONF="${FINDER_APP_DIR}/conf"
+elif [ -d "${REPO_ROOT}/conf" ]; then
+  SRC_CONF="${REPO_ROOT}/conf"
+else
+  echo "ERROR: conf directory not found" >&2
+  exit 1
+fi
+
+# Create targets and copy
+install -d "${OUTDIR}/rootfs/etc/finder-app/conf" "${OUTDIR}/rootfs/home/conf"
+install -m 644 "${SRC_CONF}/username.txt"   "${OUTDIR}/rootfs/etc/finder-app/conf/username.txt"
+install -m 644 "${SRC_CONF}/assignment.txt" "${OUTDIR}/rootfs/etc/finder-app/conf/assignment.txt"
+
+# (optional) mirror to /home/conf
+cp -a "${OUTDIR}/rootfs/etc/finder-app/conf/." "${OUTDIR}/rootfs/home/conf/"
+
 
 # TODO: Chown the root directory
 cd ${OUTDIR}/rootfs
